@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const connectDB = async () => {
+export const connectDB = async () => {
   // สั่งเชื่อมต่อโดยดึงรหัสจากไฟล์ .env
   const uri = process.env.MONGODB_URI;
 
@@ -15,5 +15,3 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
-export default connectDB;

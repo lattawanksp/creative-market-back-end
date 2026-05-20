@@ -1,3 +1,6 @@
+### GET
+GET http://localhost:7777/api/products
+
 ### สั่งเพิ่มสินค้าใหม่เข้า Database
 POST http://localhost:7777/api/products
 Content-Type: application/json
@@ -24,3 +27,12 @@ Content-Type: application/json
   ],
   "isFeatured": true
 }
+
+### PUT
+PUT http://localhost:7777/api/products/6a0d57f760d284590d602fa9
+Content-Type: application/json
+
+{"artist": "Asha"}
+
+### Delete
+DELETE http://localhost:7777/api/products/6a0d57f760d284590d602fa9
