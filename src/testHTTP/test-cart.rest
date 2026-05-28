@@ -1,10 +1,13 @@
+### ดูตะกร้าของ user
+GET http://localhost:7777/api/cart/user_123
+
 ### เพิ่มสินค้าลงตะกร้า 
 POST http://localhost:7777/api/cart/add
 Content-Type: application/json
 
 {
   "userId": "user_123",
-  "productId": "6a0d57f760d284590d602fa9", 
+  "productId": "6a17c381d7b9296b299277da", 
   "quantity": 1
 }
 

@@ -1,19 +1,40 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import mongoose from "mongoose";
 
 import { router as apiRoutes } from "./routes/index.js";
-
 import { connectDB } from "./config/mongodb.js";
+import { Limiter } from "./middlewares/rateLimit.js";
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+app.use(helmet());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://creative-market-front-end-sprint-2-mu.vercel.app",
+    ],
+    credentials: true,
+  }),
+);
 
-app.use(express.static("public"));
+app.use(Limiter);
+
+app.use(express.json());
+app.use(express.static("public")); // will remove after upload to cloud
 
 app.use("/api", apiRoutes);
+
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "Welcome to Creative Market API Server 🚀",
+    status: "Healthy",
+  });
+});
 
 app.use((error, req, res, next) => {
   console.error(error.stack);

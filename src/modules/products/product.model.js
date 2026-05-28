@@ -3,7 +3,15 @@ import mongoose from "mongoose";
 const productSchema = new mongoose.Schema(
   {
     slug: { type: String, required: true, unique: true, trim: true },
-    category: { type: String, required: true, trim: true },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      enum: {
+        values: ["Visual Art", "Craft & Handmade", "Music & Sound"],
+        message: "{VALUE} Not the right category",
+      },
+    },
     name: { type: String, required: true, trim: true },
     cartName: { type: String, required: true, trim: true },
     artist: { type: String, required: true, trim: true },

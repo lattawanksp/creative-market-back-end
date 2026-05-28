@@ -3,11 +3,21 @@ import { Product } from "./product.model.js";
 // 1. ดึงข้อมูลสินค้า
 export const getProducts = async (req, res, next) => {
   try {
-    const { featured } = req.query;
+    const { featured, search } = req.query;
 
     let query = {};
     if (featured === "true") {
       query = { isFeatured: true };
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { slug: { $regex: search, $options: "i" } },
+        { cartName: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+        { artist: { $regex: search, $options: "i" } },
+      ];
     }
 
     const products = await Product.find(query);
@@ -73,6 +83,29 @@ export const getCategories = async (req, res, next) => {
     // .distinct() จะไปค้นหาค่าใน field 'category' แล้วกรองเอาเฉพาะค่าที่ไม่ซ้ำกันมาให้จ้ะ
     const categories = await Product.distinct("category");
     res.status(200).json({ success: true, data: categories });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get product by slug ดึงสินค้าจากชื่อ slug
+export const getProductBySlug = async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+
+    const product = await Product.findOne({ slug });
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: product,
+    });
   } catch (error) {
     next(error);
   }

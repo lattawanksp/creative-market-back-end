@@ -6,36 +6,43 @@ POST http://localhost:7777/api/products
 Content-Type: application/json
 
 {
-  "slug": "visual-art",
-  "category": "Visual Art",
-  "name": "Frieren: Beyond Journey's End",
-  "cartName": "Frieren: Beyond Journey's End",
-  "artist": "Starchaser",
-  "price": 300,
-  "tags": ["#Visual Art"],
-  "description": [
-    "Description ใช้สำหรับแสดงรายละเอียดสินค้า ข้อมูลทั่วไปของชิ้นงาน และจุดเด่นที่อยากให้ผู้ชมเข้าใจก่อนตัดสินใจซื้อ"
-  ],
-  "fromArtist": [
-    "Description ใช้สำหรับเล่าที่มาของชิ้นงาน แรงบันดาลใจ หรือมุมมองจาก artist"
-  ],
-  "images": [
-    "/images/visualArt1.png",
-    "/images/visualArt2.png",
-    "/images/visualArt3.png",
-    "/images/visualArt4.png"
-  ],
-  "isFeatured": true
+  "slug": "himeko",
+      "category": "Visual Art",
+      "name": "Himeko Nova",
+      "cartName": "Himeko Nova",
+      "artist": "Asha",
+      "price": 300,
+      "tags": [
+        "#Visual Art"
+      ],
+      "description": [
+        "ผลงานภาพสเก็ตช์ลายเส้นที่ถ่ายทอดความสง่างามของ Himeko Nova แห่ง Astral Express ผ่านเส้นสายที่คมชัดและทรงพลัง เผยให้เห็นเสน่ห์ที่แฝงไปด้วยความเด็ดเดี่ยวในฐานะผู้นำแห่งการเดินทางข้ามดวงดาว"
+      ],
+      "fromArtist": [
+        "สำหรับการสเก็ตช์ Himeko Nova ในภาพนี้ ผมตั้งใจดึงเอาความเด็ดเดี่ยวและความใจดีที่ซ่อนอยู่ในแววตาของเธอออกมาครับ สำหรับผม Himeko ไม่ใช่แค่ตัวละคร แต่เธอคือหัวใจของ Astral Express ผมพยายามเก็บรายละเอียดของเครื่องประดับและทรงผมให้มีความต่อเนื่องกันที่สุด เพื่อให้ลายเส้นมันไหลลื่นไปพร้อมกับคาแรคเตอร์ของเธอ การที่ภาพนี้ยังคงเป็นลายเส้น (Line Art) มันทำให้เราเห็นความตั้งใจในทุกน้ำหนักมือที่ผมกดลงไปจริงๆ ผมหวังว่าเพื่อนๆ แฟนคลับที่ได้เห็นงานชิ้นนี้ จะสัมผัสได้ถึงความรักที่ผมมีต่อตัวละครนี้ผ่านลายเส้นทุกเส้นครับ"
+      ],
+      "images": [
+        "/images/visual-art/himeko.png"
+      ],
+      "isFeatured": true
 }
 
 ### PUT
-PUT http://localhost:7777/api/products/6a0d57f760d284590d602fa9
+PUT http://localhost:7777/api/products/6a1685fc96d193295d2a496a
 Content-Type: application/json
 
-{"artist": "Asha"}
+{ "images": [
+        "https://res.cloudinary.com/duc5gow6f/image/upload/v1779948614/frieren-01_jbkbxq.png"
+      ]}
 
 ### Delete
-DELETE http://localhost:7777/api/products/6a0d5bcfb9abca97cbb6cb3b
+DELETE http://localhost:7777/api/products/6a1687df96d193295d2a496c
 
 ### GET CATEGORIES
 GET http://localhost:7777/api/products/categories
+
+### Get product by slug
+GET http://localhost:7777/api/products/cybernecklace
+
+### Search products 
+GET http://localhost:7777/api/products?search=c

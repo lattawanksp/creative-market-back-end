@@ -27,6 +27,32 @@ export const addItemToCart = async (req, res, next) => {
   }
 };
 
+// Get cart by user id
+export const getCartByUserId = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const cart = await Cart.findOne({ userId }).populate("items.productId");
+
+    if (!cart) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          userId,
+          items: [],
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: cart,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ล้างตะกร้าของ User คนนั้นๆ
 export const clearCart = async (req, res, next) => {
   try {
