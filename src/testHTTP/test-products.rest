@@ -39,3 +39,6 @@ DELETE http://localhost:7777/api/products/6a0d5bcfb9abca97cbb6cb3b
 
 ### GET CATEGORIES
 GET http://localhost:7777/api/products/categories
+
+### Get product by slug
+GET http://localhost:7777/api/products/cybernecklace
