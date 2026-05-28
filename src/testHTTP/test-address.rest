@@ -1,0 +1,15 @@
+### GET my address
+GET http://localhost:7777/api/users/me/address
+
+### PUT my address
+PUT http://localhost:7777/api/users/me/address
+Content-Type: application/json
+
+{
+  "recipientName": "Linn",
+  "phone": "0926249742",
+  "street": "123 ถนนสุขุมวิท",
+  "district": "คลองเตย",
+  "province": "Bangkok",
+  "postcode": "10110"
+}
