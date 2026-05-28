@@ -10,7 +10,16 @@ import { Limiter } from "./middlewares/rateLimit.js";
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://creative-market-front-end-sprint-2-mu.vercel.app",
+    ],
+    credentials: true,
+  }),
+);
 
 app.use(Limiter);
 
