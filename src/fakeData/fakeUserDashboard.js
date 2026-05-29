@@ -3,7 +3,7 @@ export const fakeUserDashboard = {
     id: "user_001",
     displayName: "Luna Atelier",
     username: "lunaatelier",
-    role: "buyer",
+    role: "user",
     roleLabel: "Customer",
     avatarUrl: "https://example.com/avatar.jpg",
   },

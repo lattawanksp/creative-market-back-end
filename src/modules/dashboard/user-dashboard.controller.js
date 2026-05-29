@@ -2,8 +2,10 @@ import { fakeUserDashboard } from "../../fakeData/fakeUserDashboard.js";
 
 export const getUserDashboard = async (req, res, next) => {
   try {
+    const userId = req.user.userId || req.user.id;
+
     const profile = {
-      id: req.user.id,
+      id: userId,
       displayName:
         req.user.displayName || fakeUserDashboard.profile.displayName,
       username: req.user.username || fakeUserDashboard.profile.username,
