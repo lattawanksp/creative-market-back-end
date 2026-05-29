@@ -1,0 +1,7 @@
+### User Dashboard
+GET http://localhost:7777/api/dashboard/user
+
+###
+
+### Admin Dashboard
+GET http://localhost:7777/api/dashboard/admin

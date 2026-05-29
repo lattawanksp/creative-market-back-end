@@ -1,15 +1,17 @@
-### GET my address
+### Get my address
 GET http://localhost:7777/api/users/me/address
 
-### PUT my address
+###
+
+### Create or update my address
 PUT http://localhost:7777/api/users/me/address
 Content-Type: application/json
 
 {
-  "recipientName": "Linn",
-  "phone": "0926249742",
+  "recipientName": "Receiver Name",
+  "phone": "0812345678",
   "street": "123 ถนนสุขุมวิท",
-  "district": "คลองเตย",
-  "province": "Bangkok",
+  "district": "วัฒนา",
+  "province": "กรุงเทพมหานคร",
   "postcode": "10110"
 }
