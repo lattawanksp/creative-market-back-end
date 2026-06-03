@@ -1,3 +1,5 @@
+import { upload } from "../middlewares/upload.js";
+
 import express from "express";
 import {
   getProducts,
@@ -7,6 +9,7 @@ import {
   getCategories,
   getProductBySlug,
 } from "../modules/products/product.controller.js";
+import { seedProductsDirectly, updateAllQuantities } from "../utils/seed.js";
 
 export const router = express.Router();
 
@@ -15,10 +18,14 @@ router.get("/categories", getCategories);
 
 router.get("/", getProducts);
 
-router.post("/", createProduct);
+router.post("/", upload.single("image"), createProduct);
 
 router.put("/:id", updateProduct);
 
 router.delete("/:id", deleteProduct);
 
 router.get("/:slug", getProductBySlug);
+
+router.post("/seed-direct", seedProductsDirectly);
+//ใช้ PATCH เพราะเป็นการอัปเดตข้อมูลบางส่วนตามหลัก Best Practice
+router.patch("/update-quantity-all", updateAllQuantities);

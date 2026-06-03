@@ -23,8 +23,12 @@ const CATEGORY_COLORS = {
 };
 
 const getCustomerLookup = async (orders) => {
-  const userIds = [...new Set(orders.map((order) => order.userId).filter(Boolean))];
-  const users = await User.find({ _id: { $in: userIds } }).select("username email");
+  const userIds = [
+    ...new Set(orders.map((order) => order.userId).filter(Boolean)),
+  ];
+  const users = await User.find({ _id: { $in: userIds } }).select(
+    "username email",
+  );
 
   return new Map(
     users.map((user) => [String(user._id), user.username || user.email || "-"]),
@@ -73,7 +77,10 @@ const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
   });
 
 const getMetricsFromPaidOrders = (paidOrders) => {
-  const totalSales = paidOrders.reduce((sum, order) => sum + order.totalPrice, 0);
+  const totalSales = paidOrders.reduce(
+    (sum, order) => sum + order.totalPrice,
+    0,
+  );
   const itemSold = paidOrders.reduce(
     (sum, order) =>
       sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
@@ -148,7 +155,11 @@ export const getAdminOverview = async (req, res, next) => {
     const paidOrders = orders.filter((order) => order.status === "paid");
     const customerLookup = await getCustomerLookup(orders);
     const paymentProofMap = await getPaymentProofMap(orders);
-    const flattenedOrders = flattenOrders(orders, customerLookup, paymentProofMap);
+    const flattenedOrders = flattenOrders(
+      orders,
+      customerLookup,
+      paymentProofMap,
+    );
     const metrics = getMetricsFromPaidOrders(paidOrders);
 
     return res.status(200).json({
@@ -170,14 +181,19 @@ export const getAdminOrders = async (req, res, next) => {
     const orders = await loadOrdersWithProducts();
     const customerLookup = await getCustomerLookup(orders);
     const paymentProofMap = await getPaymentProofMap(orders);
-    const flattenedOrders = flattenOrders(orders, customerLookup, paymentProofMap);
+    const flattenedOrders = flattenOrders(
+      orders,
+      customerLookup,
+      paymentProofMap,
+    );
 
     return res.status(200).json({
       success: true,
       data: {
         summary: {
           allOrders: orders.length,
-          pendingCount: orders.filter((order) => order.status === "pending").length,
+          pendingCount: orders.filter((order) => order.status === "pending")
+            .length,
           paidCount: orders.filter((order) => order.status === "paid").length,
           cancelledCount: orders.filter((order) => order.status === "cancelled")
             .length,
