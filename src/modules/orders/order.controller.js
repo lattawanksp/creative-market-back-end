@@ -104,9 +104,7 @@ export const createOrder = async (req, res, next) => {
       });
 
       // ทำการหักสต็อกสินค้าทันที (แบบ Atomic ป้องกันสต็อกติดลบ)
-      await Product.findByIdAndUpdate(product._id, {
-        $inc: { quantity: -item.quantity },
-      });
+      // Stock ถูกหักไปแล้วใน findOneAndUpdate ด้านบน
     }
 
     if (orderItems.length === 0) {

@@ -4,14 +4,14 @@ import { Address } from "../address/address.model.js";
 import { PaymentProof } from "../payment-proof/payment-proof.model.js";
 
 const STATUS_LABELS = {
-  pending: "รอดำเนินการ",
+  pending: "รอชำระเงิน",
   paid: "ชำระเงินแล้ว",
   cancelled: "ยกเลิก",
 };
 
 const PAYMENT_PROOF_STATUS_LABELS = {
-  submitted: "รอ admin ตรวจ",
-  approved: "confirmed",
+  submitted: "รอตรวจสอบ",
+  approved: "สำเร็จแล้ว",
   rejected: "ตรวจสอบข้อมูลการโอนอีกครั้ง",
 };
 
@@ -37,7 +37,7 @@ const getDisplayStatus = (orderStatus, paymentProof = null) => {
   if (orderStatus === "pending") {
     return {
       key: "pending",
-      label: "รอดำเนินการ",
+      label: "รอชำระเงิน",
     };
   }
 
@@ -45,21 +45,21 @@ const getDisplayStatus = (orderStatus, paymentProof = null) => {
     if (!paymentProof) {
       return {
         key: "awaiting-proof",
-        label: "รอกรอกหลักฐาน",
+        label: "รอแนบสลิป",
       };
     }
 
     if (paymentProof.status === "submitted") {
       return {
         key: "awaiting-review",
-        label: "รอ admin ตรวจ",
+        label: "รอตรวจสอบ",
       };
     }
 
     if (paymentProof.status === "approved") {
       return {
         key: "confirmed",
-        label: "confirmed ✅",
+        label: "สำเร็จแล้ว",
       };
     }
 
