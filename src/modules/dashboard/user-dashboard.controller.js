@@ -1,6 +1,7 @@
 import { Order } from "../orders/order.model.js";
 import { User } from "../register/user.model.js";
 import { Address } from "../address/address.model.js";
+import { PaymentProof } from "../payment-proof/payment-proof.model.js";
 
 const STATUS_LABELS = {
   pending: "รอดำเนินการ",
@@ -8,11 +9,28 @@ const STATUS_LABELS = {
   cancelled: "ยกเลิก",
 };
 
-const flattenOrderItems = (
-  orders, //แปลง orders หลายใบให้เป็น list แบนของ item แต่ละชิ้น
-) =>
-  orders.flatMap((order) =>
-    order.items.map((item, index) => ({
+const PAYMENT_PROOF_STATUS_LABELS = {
+  submitted: "รอตรวจสอบ",
+  approved: "อนุมัติแล้ว",
+  rejected: "ข้อมูลการโอนไม่ผ่าน",
+};
+
+const getPaymentProofMap = async (orders) => {
+  const orderIds = orders.map((order) => order._id);
+  const proofs = await PaymentProof.find({
+    orderId: { $in: orderIds },
+  }).select(
+    "orderId transferDate transferTime transferAmount status uploadedAt reviewedAt",
+  );
+
+  return new Map(proofs.map((proof) => [String(proof.orderId), proof]));
+};
+
+const flattenOrderItems = (orders, paymentProofMap = new Map()) =>
+  orders.flatMap((order) => {
+    const paymentProof = paymentProofMap.get(String(order._id)) || null;
+
+    return order.items.map((item, index) => ({
       id: `${order._id}-${item.productId}-${index}`,
       orderId: order._id,
       productId: item.productId?._id || item.productId,
@@ -26,12 +44,18 @@ const flattenOrderItems = (
       statusLabel: STATUS_LABELS[order.status] || order.status.toUpperCase(),
       courier: order.courier || "",
       trackingNumber: order.trackingNumber || "",
+      paymentProofStatus: paymentProof?.status || "none",
+      paymentProofStatusLabel: paymentProof
+        ? PAYMENT_PROOF_STATUS_LABELS[paymentProof.status] || paymentProof.status
+        : "",
+      transferDate: paymentProof?.transferDate || "",
+      transferTime: paymentProof?.transferTime || "",
+      transferAmount: paymentProof?.transferAmount || 0,
       createdAt: order.createdAt,
-    })),
-  );
+    }));
+  });
 
 export const getDashboardMe = async (req, res, next) => {
-  // ดึงข้อมูล profile (username, email, role)
   try {
     const userId = req.user?.userId;
     const user = await User.findById(userId).select("username email role");
@@ -58,7 +82,6 @@ export const getDashboardMe = async (req, res, next) => {
 };
 
 export const getMySummary = async (req, res, next) => {
-  //ดึงสถิติ — จำนวน order และยอดเงินที่จ่ายไปแล้ว (status: paid เท่านั้น)
   try {
     const userId = req.user?.userId;
     const paidOrders = await Order.find({ userId, status: "paid" }).select(
@@ -83,17 +106,17 @@ export const getMySummary = async (req, res, next) => {
 };
 
 export const getMyStatus = async (req, res, next) => {
-  //ดึงเฉพาะ order ที่ยัง pending (รอชำระ)
   try {
     const userId = req.user?.userId;
     const orders = await Order.find({ userId, status: "pending" })
       .sort({ createdAt: -1 })
       .select("items status courier trackingNumber createdAt")
       .populate("items.productId", "images artist");
+    const paymentProofMap = await getPaymentProofMap(orders);
 
     return res.status(200).json({
       success: true,
-      data: flattenOrderItems(orders),
+      data: flattenOrderItems(orders, paymentProofMap),
     });
   } catch (error) {
     next(error);
@@ -101,17 +124,17 @@ export const getMyStatus = async (req, res, next) => {
 };
 
 export const getMyHistory = async (req, res, next) => {
-  //ดึงเฉพาะ order ที่ paid แล้ว (ประวัติ)
   try {
     const userId = req.user?.userId;
     const orders = await Order.find({ userId, status: "paid" })
       .sort({ createdAt: -1 })
       .select("items status courier trackingNumber createdAt")
       .populate("items.productId", "images artist");
+    const paymentProofMap = await getPaymentProofMap(orders);
 
     return res.status(200).json({
       success: true,
-      data: flattenOrderItems(orders),
+      data: flattenOrderItems(orders, paymentProofMap),
     });
   } catch (error) {
     next(error);
@@ -119,7 +142,6 @@ export const getMyHistory = async (req, res, next) => {
 };
 
 export const getMyOrders = async (req, res, next) => {
-  //ดึง order ทั้งหมด พร้อม summary รวม
   try {
     const userId = req.user?.userId;
     const orders = await Order.find({ userId })
@@ -128,7 +150,8 @@ export const getMyOrders = async (req, res, next) => {
       .populate("items.productId", "images artist");
 
     const paidOrders = orders.filter((order) => order.status === "paid");
-    const flattenedOrders = flattenOrderItems(orders);
+    const paymentProofMap = await getPaymentProofMap(orders);
+    const flattenedOrders = flattenOrderItems(orders, paymentProofMap);
 
     return res.status(200).json({
       success: true,
@@ -149,8 +172,102 @@ export const getMyOrders = async (req, res, next) => {
   }
 };
 
+export const submitMyPaymentProof = async (req, res, next) => {
+  try {
+    const userId = req.user?.userId;
+    const { orderId } = req.params;
+    const { transferDate, transferTime, transferAmount } = req.body;
+
+    const order = await Order.findOne({ _id: orderId, userId }).select(
+      "_id userId status totalPrice",
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "ไม่พบคำสั่งซื้อที่ต้องการแจ้งการโอนเงิน",
+      });
+    }
+
+    if (order.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "คำสั่งซื้อนี้ไม่สามารถแจ้งการโอนเงินได้แล้ว",
+      });
+    }
+
+    const requiredFields = {
+      transferDate,
+      transferTime,
+      transferAmount,
+    };
+
+    const missingField = Object.entries(requiredFields).find(
+      ([, value]) => String(value || "").trim() === "",
+    );
+
+    if (missingField) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณากรอกข้อมูลวันโอน เวลาโอน และยอดเงินให้ครบถ้วน",
+      });
+    }
+
+    const parsedAmount = Number(transferAmount);
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ยอดเงินที่โอนต้องเป็นตัวเลขมากกว่า 0",
+      });
+    }
+
+    const existingProof = await PaymentProof.findOne({ orderId: order._id });
+
+    if (existingProof && existingProof.status === "submitted") {
+      return res.status(400).json({
+        success: false,
+        message: "คำสั่งซื้อนี้มีข้อมูลแจ้งโอนรอตรวจสอบอยู่แล้ว",
+      });
+    }
+
+    const paymentProof = await PaymentProof.findOneAndUpdate(
+      { orderId: order._id },
+      {
+        orderId: order._id,
+        userId,
+        transferDate: String(transferDate).trim(),
+        transferTime: String(transferTime).trim(),
+        transferAmount: parsedAmount,
+        status: "submitted",
+        uploadedAt: new Date(),
+        reviewedAt: null,
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "ส่งข้อมูลการโอนเงินเรียบร้อยแล้ว",
+      data: {
+        orderId: paymentProof.orderId,
+        status: paymentProof.status,
+        statusLabel: PAYMENT_PROOF_STATUS_LABELS[paymentProof.status],
+        transferDate: paymentProof.transferDate,
+        transferTime: paymentProof.transferTime,
+        transferAmount: paymentProof.transferAmount,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMyAddress = async (req, res, next) => {
-  //ดึงที่อยู่จัดส่งของ user
   try {
     const userId = req.user?.userId;
     const addressDocument = await Address.findOne({ userId }).select("address");
@@ -165,7 +282,6 @@ export const getMyAddress = async (req, res, next) => {
 };
 
 export const upsertMyAddress = async (req, res, next) => {
-  //บันทึกหรืออัปเดตที่อยู่ (ถ้ามีอยู่แล้วก็ update ถ้ายังไม่มีก็ insert)
   try {
     const userId = req.user?.userId;
     const { recipientName, phone, street, district, province, postcode } =
@@ -220,7 +336,6 @@ export const upsertMyAddress = async (req, res, next) => {
 };
 
 export const deleteMyAddress = async (req, res, next) => {
-  //ลบที่อยู่
   try {
     const userId = req.user?.userId;
     await Address.findOneAndDelete({ userId });

@@ -7,6 +7,7 @@ import {
   getMyOrders,
   getMyStatus,
   getMySummary,
+  submitMyPaymentProof,
   upsertMyAddress,
 } from "../modules/dashboard/user-dashboard.controller.js";
 import { verifyToken } from "../middlewares/login.auth.middleware.js";
@@ -20,6 +21,7 @@ router.get("/my-summary", getMySummary);
 router.get("/my-status", getMyStatus);
 router.get("/my-history", getMyHistory);
 router.get("/my-orders", getMyOrders);
+router.put("/orders/:orderId/payment-proof", submitMyPaymentProof);
 router.get("/my-address", getMyAddress);
 router.put("/my-address", upsertMyAddress);
 router.delete("/my-address", deleteMyAddress);

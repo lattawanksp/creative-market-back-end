@@ -28,7 +28,7 @@ Content-Type: application/json
 }
 
 ### PUT
-PUT http://localhost:7777/api/products/6a17d6fa366cc8cf0470d4d9
+PUT http://localhost:7777/api/products/6a17d62a366cc8cf0470d4d8
 Content-Type: application/json
 
 {

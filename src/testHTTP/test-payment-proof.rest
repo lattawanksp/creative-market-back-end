@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:7777/api
+@orderId = PUT_ORDER_ID_HERE
+
+### Login as user
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password1234"
+}
+
+### Submit payment proof from user dashboard
+PUT {{baseUrl}}/user-dashboard/orders/{{orderId}}/payment-proof
+Content-Type: application/json
+
+{
+  "transferDate": "2026-06-03",
+  "transferTime": "14:35",
+  "transferAmount": 850
+}
+
+### Login as admin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password1234"
+}
+
+### Review payment proof - approve
+PATCH {{baseUrl}}/admin-dashboard/orders/{{orderId}}/payment-proof
+Content-Type: application/json
+
+{
+  "action": "approve"
+}
+
+### Review payment proof - reject
+PATCH {{baseUrl}}/admin-dashboard/orders/{{orderId}}/payment-proof
+Content-Type: application/json
+
+{
+  "action": "reject"
+}

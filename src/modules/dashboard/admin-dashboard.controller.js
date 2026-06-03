@@ -1,10 +1,18 @@
 import { Order } from "../orders/order.model.js";
 import { User } from "../register/user.model.js";
+import { PaymentProof } from "../payment-proof/payment-proof.model.js";
 
 const STATUS_LABELS = {
   pending: "รอดำเนินการ",
   paid: "สำเร็จแล้ว",
   cancelled: "ยกเลิก",
+};
+
+const PAYMENT_PROOF_STATUS_LABELS = {
+  none: "ยังไม่ส่งข้อมูลโอน",
+  submitted: "รอตรวจสอบ",
+  approved: "อนุมัติแล้ว",
+  rejected: "ข้อมูลการโอนไม่ผ่าน",
 };
 
 const CATEGORY_COLORS = {
@@ -15,25 +23,30 @@ const CATEGORY_COLORS = {
 };
 
 const getCustomerLookup = async (orders) => {
-  //ดึง username/email ของ user ทุกคนที่มี order แล้วทำเป็น Map สำหรับ lookup เร็ว
-  const userIds = [
-    ...new Set(orders.map((order) => order.userId).filter(Boolean)),
-  ];
-  const users = await User.find({ _id: { $in: userIds } }).select(
-    "username email",
-  );
+  const userIds = [...new Set(orders.map((order) => order.userId).filter(Boolean))];
+  const users = await User.find({ _id: { $in: userIds } }).select("username email");
 
   return new Map(
     users.map((user) => [String(user._id), user.username || user.email || "-"]),
   );
 };
 
-const flattenOrders = (
-  orders,
-  customerLookup, //แปลง orders หลายใบให้เป็น list แบนของ item แต่ละชิ้น พร้อมชื่อ customer
-) =>
-  orders.flatMap((order) =>
-    order.items.map((item, index) => ({
+const getPaymentProofMap = async (orders) => {
+  const orderIds = orders.map((order) => order._id);
+  const proofs = await PaymentProof.find({
+    orderId: { $in: orderIds },
+  }).select(
+    "orderId transferDate transferTime transferAmount status uploadedAt reviewedAt",
+  );
+
+  return new Map(proofs.map((proof) => [String(proof.orderId), proof]));
+};
+
+const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
+  orders.flatMap((order) => {
+    const paymentProof = paymentProofMap.get(String(order._id)) || null;
+
+    return order.items.map((item, index) => ({
       id: `${order._id}-${item.productId}-${index}`,
       orderId: order._id,
       productId: item.productId?._id || item.productId || null,
@@ -43,22 +56,24 @@ const flattenOrders = (
       quantity: item.quantity,
       price: item.price,
       amount: item.price * item.quantity,
-      customer: customerLookup.get(order.userId) || "-",
+      customer: customerLookup.get(String(order.userId)) || "-",
       status: order.status,
       statusLabel: STATUS_LABELS[order.status] || order.status,
       courier: order.courier || "",
       trackingNumber: order.trackingNumber || "",
+      paymentProofStatus: paymentProof?.status || "none",
+      paymentProofStatusLabel:
+        PAYMENT_PROOF_STATUS_LABELS[paymentProof?.status || "none"],
+      transferDate: paymentProof?.transferDate || "",
+      transferTime: paymentProof?.transferTime || "",
+      transferAmount: paymentProof?.transferAmount || 0,
       createdAt: order.createdAt,
       date: order.createdAt,
-    })),
-  );
+    }));
+  });
 
 const getMetricsFromPaidOrders = (paidOrders) => {
-  //คำนวณ totalSales, จำนวน order, จำนวนชิ้น, ค่าเฉลี่ยต่อ order
-  const totalSales = paidOrders.reduce(
-    (sum, order) => sum + order.totalPrice,
-    0,
-  );
+  const totalSales = paidOrders.reduce((sum, order) => sum + order.totalPrice, 0);
   const itemSold = paidOrders.reduce(
     (sum, order) =>
       sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
@@ -75,7 +90,6 @@ const getMetricsFromPaidOrders = (paidOrders) => {
 };
 
 const getSalesOverview = (paidOrders) => {
-  //สรุปยอดขายย้อนหลัง 7 วัน แยกตามวัน
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -105,13 +119,11 @@ const getSalesOverview = (paidOrders) => {
 };
 
 const getCategoryBreakdown = (paidOrders) => {
-  //สรุปจำนวนชิ้นที่ขายได้แยกตาม category พร้อมสี
   const categoryTotals = new Map();
 
   paidOrders.forEach((order) => {
     order.items.forEach((item) => {
       const category = item.productId?.category || "Unknown";
-
       const currentTotal = categoryTotals.get(category) || 0;
       categoryTotals.set(category, currentTotal + item.quantity);
     });
@@ -126,18 +138,17 @@ const getCategoryBreakdown = (paidOrders) => {
 };
 
 const loadOrdersWithProducts = () =>
-  //ดึง order ทั้งหมดพร้อม populate ข้อมูล product
   Order.find({})
     .sort({ createdAt: -1 })
     .populate("items.productId", "images artist category");
 
 export const getAdminOverview = async (req, res, next) => {
-  //หน้า overview — metrics + กราฟ 7 วัน + category + 6 order ล่าสุด
   try {
     const orders = await loadOrdersWithProducts();
     const paidOrders = orders.filter((order) => order.status === "paid");
     const customerLookup = await getCustomerLookup(orders);
-    const flattenedOrders = flattenOrders(orders, customerLookup);
+    const paymentProofMap = await getPaymentProofMap(orders);
+    const flattenedOrders = flattenOrders(orders, customerLookup, paymentProofMap);
     const metrics = getMetricsFromPaidOrders(paidOrders);
 
     return res.status(200).json({
@@ -155,25 +166,21 @@ export const getAdminOverview = async (req, res, next) => {
 };
 
 export const getAdminOrders = async (req, res, next) => {
-  //หน้า orders — order ทั้งหมด + summary นับตาม status
   try {
     const orders = await loadOrdersWithProducts();
     const customerLookup = await getCustomerLookup(orders);
-    const flattenedOrders = flattenOrders(orders, customerLookup);
+    const paymentProofMap = await getPaymentProofMap(orders);
+    const flattenedOrders = flattenOrders(orders, customerLookup, paymentProofMap);
 
     return res.status(200).json({
       success: true,
       data: {
         summary: {
-          allOrders: flattenedOrders.length,
-          pendingCount: flattenedOrders.filter(
-            (order) => order.status === "pending",
-          ).length,
-          paidCount: flattenedOrders.filter((order) => order.status === "paid")
+          allOrders: orders.length,
+          pendingCount: orders.filter((order) => order.status === "pending").length,
+          paidCount: orders.filter((order) => order.status === "paid").length,
+          cancelledCount: orders.filter((order) => order.status === "cancelled")
             .length,
-          cancelledCount: flattenedOrders.filter(
-            (order) => order.status === "cancelled",
-          ).length,
         },
         orders: flattenedOrders,
       },
@@ -184,7 +191,6 @@ export const getAdminOrders = async (req, res, next) => {
 };
 
 export const getAdminSales = async (req, res, next) => {
-  //หน้า sales — metrics + กราฟ 7 วัน + category (เฉพาะ paid)
   try {
     const orders = await loadOrdersWithProducts();
     const paidOrders = orders.filter((order) => order.status === "paid");
@@ -228,6 +234,62 @@ export const updateOrderShipping = async (req, res, next) => {
         orderId: order._id,
         courier: order.courier,
         trackingNumber: order.trackingNumber,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reviewPaymentProof = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { action } = req.body;
+
+    if (!["approve", "reject"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid review action",
+      });
+    }
+
+    const paymentProof = await PaymentProof.findOne({ orderId });
+
+    if (!paymentProof) {
+      return res.status(404).json({
+        success: false,
+        message: "ไม่พบข้อมูลการแจ้งโอนของคำสั่งซื้อนี้",
+      });
+    }
+
+    if (action === "approve") {
+      paymentProof.status = "approved";
+      paymentProof.reviewedAt = new Date();
+
+      const order = await Order.findById(orderId);
+      if (order) {
+        order.status = "paid";
+        await order.save();
+      }
+    }
+
+    if (action === "reject") {
+      paymentProof.status = "rejected";
+      paymentProof.reviewedAt = new Date();
+    }
+
+    await paymentProof.save();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        action === "approve"
+          ? "อนุมัติข้อมูลการโอนเรียบร้อยแล้ว"
+          : "ตีกลับข้อมูลการโอนเรียบร้อยแล้ว",
+      data: {
+        orderId: paymentProof.orderId,
+        status: paymentProof.status,
+        statusLabel: PAYMENT_PROOF_STATUS_LABELS[paymentProof.status],
       },
     });
   } catch (error) {

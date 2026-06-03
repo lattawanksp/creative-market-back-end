@@ -3,6 +3,7 @@ import {
   getAdminOrders,
   getAdminOverview,
   getAdminSales,
+  reviewPaymentProof,
   updateOrderShipping,
 } from "../modules/dashboard/admin-dashboard.controller.js";
 import { requireRole, verifyToken } from "../middlewares/login.auth.middleware.js";
@@ -16,3 +17,4 @@ router.get("/overview", getAdminOverview);
 router.get("/orders", getAdminOrders);
 router.get("/sales", getAdminSales);
 router.patch("/orders/:orderId/shipping", updateOrderShipping);
+router.patch("/orders/:orderId/payment-proof", reviewPaymentProof);
