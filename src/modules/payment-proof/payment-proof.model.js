@@ -13,9 +13,10 @@ const paymentProofSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    transferDate: { type: String, required: true, trim: true },
-    transferTime: { type: String, required: true, trim: true },
-    transferAmount: { type: Number, required: true, min: 0 },
+    transferDate: { type: String, default: "", trim: true },
+    transferTime: { type: String, default: "", trim: true },
+    transferAmount: { type: Number, default: 0, min: 0 },
+    proofImageBase64: { type: String, default: "" },
     status: {
       type: String,
       enum: ["submitted", "approved", "rejected"],

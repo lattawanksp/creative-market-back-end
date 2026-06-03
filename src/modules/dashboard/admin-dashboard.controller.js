@@ -91,7 +91,7 @@ const getPaymentProofMap = async (orders) => {
   const proofs = await PaymentProof.find({
     orderId: { $in: orderIds },
   }).select(
-    "orderId transferDate transferTime transferAmount status uploadedAt reviewedAt",
+    "orderId transferDate transferTime transferAmount proofImageBase64 status uploadedAt reviewedAt",
   );
 
   return new Map(proofs.map((proof) => [String(proof.orderId), proof]));
@@ -126,6 +126,7 @@ const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
       transferDate: paymentProof?.transferDate || "",
       transferTime: paymentProof?.transferTime || "",
       transferAmount: paymentProof?.transferAmount || 0,
+      proofImageBase64: paymentProof?.proofImageBase64 || "",
       createdAt: order.createdAt,
       date: order.createdAt,
     }));

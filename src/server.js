@@ -28,7 +28,7 @@ app.use(
 
 app.use(Limiter);
 
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use(express.static("public")); // will remove after upload to cloud
 app.use(cookieParser());   // will remove after upload to cloud (P'Montri's Add)
 

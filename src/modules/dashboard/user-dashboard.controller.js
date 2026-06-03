@@ -20,7 +20,7 @@ const getPaymentProofMap = async (orders) => {
   const proofs = await PaymentProof.find({
     orderId: { $in: orderIds },
   }).select(
-    "orderId transferDate transferTime transferAmount status uploadedAt reviewedAt",
+    "orderId transferDate transferTime transferAmount proofImageBase64 status uploadedAt reviewedAt",
   );
 
   return new Map(proofs.map((proof) => [String(proof.orderId), proof]));
@@ -106,6 +106,7 @@ const flattenOrderItems = (orders, paymentProofMap = new Map()) =>
       transferDate: paymentProof?.transferDate || "",
       transferTime: paymentProof?.transferTime || "",
       transferAmount: paymentProof?.transferAmount || 0,
+      proofImageBase64: paymentProof?.proofImageBase64 || "",
       createdAt: order.createdAt,
     }));
   });
@@ -245,7 +246,7 @@ export const submitMyPaymentProof = async (req, res, next) => {
   try {
     const userId = req.user?.userId;
     const { orderId } = req.params;
-    const { transferDate, transferTime, transferAmount } = req.body;
+    const { proofImageBase64 } = req.body;
 
     const order = await Order.findOne({ _id: orderId, userId }).select(
       "_id userId status totalPrice",
@@ -265,29 +266,20 @@ export const submitMyPaymentProof = async (req, res, next) => {
       });
     }
 
-    const requiredFields = {
-      transferDate,
-      transferTime,
-      transferAmount,
-    };
-
-    const missingField = Object.entries(requiredFields).find(
-      ([, value]) => String(value || "").trim() === "",
-    );
-
-    if (missingField) {
+    if (
+      typeof proofImageBase64 !== "string" ||
+      !proofImageBase64.startsWith("data:image/")
+    ) {
       return res.status(400).json({
         success: false,
-        message: "กรุณากรอกข้อมูลวันโอน เวลาโอน และยอดเงินให้ครบถ้วน",
+        message: "กรุณาอัปโหลดรูปสลิปการโอนเงิน",
       });
     }
 
-    const parsedAmount = Number(transferAmount);
-
-    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+    if (proofImageBase64.length > 1500000) {
       return res.status(400).json({
         success: false,
-        message: "ยอดเงินที่โอนต้องเป็นตัวเลขมากกว่า 0",
+        message: "รูปสลิปมีขนาดใหญ่เกินไป",
       });
     }
 
@@ -305,9 +297,10 @@ export const submitMyPaymentProof = async (req, res, next) => {
       {
         orderId: order._id,
         userId,
-        transferDate: String(transferDate).trim(),
-        transferTime: String(transferTime).trim(),
-        transferAmount: parsedAmount,
+        transferDate: "",
+        transferTime: "",
+        transferAmount: 0,
+        proofImageBase64: String(proofImageBase64).trim(),
         status: "submitted",
         uploadedAt: new Date(),
         reviewedAt: null,
@@ -321,14 +314,12 @@ export const submitMyPaymentProof = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "ส่งข้อมูลการโอนเงินเรียบร้อยแล้ว",
+      message: "ส่งรูปสลิปการโอนเงินเรียบร้อยแล้ว",
       data: {
         orderId: paymentProof.orderId,
         status: paymentProof.status,
         statusLabel: PAYMENT_PROOF_STATUS_LABELS[paymentProof.status],
-        transferDate: paymentProof.transferDate,
-        transferTime: paymentProof.transferTime,
-        transferAmount: paymentProof.transferAmount,
+        proofImageBase64: paymentProof.proofImageBase64,
       },
     });
   } catch (error) {
