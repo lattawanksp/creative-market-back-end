@@ -5,14 +5,14 @@ import { PaymentProof } from "../payment-proof/payment-proof.model.js";
 
 const STATUS_LABELS = {
   pending: "รอดำเนินการ",
-  paid: "สำเร็จแล้ว",
+  paid: "ชำระเงินแล้ว",
   cancelled: "ยกเลิก",
 };
 
 const PAYMENT_PROOF_STATUS_LABELS = {
-  submitted: "รอตรวจสอบ",
-  approved: "อนุมัติแล้ว",
-  rejected: "ข้อมูลการโอนไม่ผ่าน",
+  submitted: "รอ admin ตรวจ",
+  approved: "confirmed",
+  rejected: "ตรวจสอบข้อมูลการโอนอีกครั้ง",
 };
 
 const getPaymentProofMap = async (orders) => {
@@ -26,9 +26,61 @@ const getPaymentProofMap = async (orders) => {
   return new Map(proofs.map((proof) => [String(proof.orderId), proof]));
 };
 
+const getDisplayStatus = (orderStatus, paymentProof = null) => {
+  if (orderStatus === "cancelled") {
+    return {
+      key: "cancelled",
+      label: "ยกเลิก",
+    };
+  }
+
+  if (orderStatus === "pending") {
+    return {
+      key: "pending",
+      label: "รอดำเนินการ",
+    };
+  }
+
+  if (orderStatus === "paid") {
+    if (!paymentProof) {
+      return {
+        key: "awaiting-proof",
+        label: "รอกรอกหลักฐาน",
+      };
+    }
+
+    if (paymentProof.status === "submitted") {
+      return {
+        key: "awaiting-review",
+        label: "รอ admin ตรวจ",
+      };
+    }
+
+    if (paymentProof.status === "approved") {
+      return {
+        key: "confirmed",
+        label: "confirmed ✅",
+      };
+    }
+
+    if (paymentProof.status === "rejected") {
+      return {
+        key: "awaiting-proof",
+        label: "ตรวจสอบข้อมูลการโอนอีกครั้ง",
+      };
+    }
+  }
+
+  return {
+    key: orderStatus,
+    label: STATUS_LABELS[orderStatus] || orderStatus,
+  };
+};
+
 const flattenOrderItems = (orders, paymentProofMap = new Map()) =>
   orders.flatMap((order) => {
     const paymentProof = paymentProofMap.get(String(order._id)) || null;
+    const displayStatus = getDisplayStatus(order.status, paymentProof);
 
     return order.items.map((item, index) => ({
       id: `${order._id}-${item.productId}-${index}`,
@@ -36,12 +88,15 @@ const flattenOrderItems = (orders, paymentProofMap = new Map()) =>
       productId: item.productId?._id || item.productId,
       name: item.name,
       artist: item.productId?.artist || "-",
+      images: item.productId?.images || [],
       image: item.productId?.images?.[0] || "",
       price: item.price,
       quantity: item.quantity,
       lineTotal: item.price * item.quantity,
       status: order.status,
       statusLabel: STATUS_LABELS[order.status] || order.status.toUpperCase(),
+      displayStatus: displayStatus.key,
+      displayStatusLabel: displayStatus.label,
       courier: order.courier || "",
       trackingNumber: order.trackingNumber || "",
       paymentProofStatus: paymentProof?.status || "none",
@@ -84,11 +139,16 @@ export const getDashboardMe = async (req, res, next) => {
 export const getMySummary = async (req, res, next) => {
   try {
     const userId = req.user?.userId;
-    const paidOrders = await Order.find({ userId, status: "paid" }).select(
-      "totalPrice",
+    const orders = await Order.find({ userId, status: "paid" }).select(
+      "_id totalPrice status",
     );
+    const paymentProofMap = await getPaymentProofMap(orders);
+    const confirmedOrders = orders.filter((order) => {
+      const paymentProof = paymentProofMap.get(String(order._id)) || null;
+      return getDisplayStatus(order.status, paymentProof).key === "confirmed";
+    });
 
-    const totalSpend = paidOrders.reduce(
+    const totalSpend = confirmedOrders.reduce(
       (sum, order) => sum + order.totalPrice,
       0,
     );
@@ -96,7 +156,7 @@ export const getMySummary = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: {
-        totalOrders: paidOrders.length,
+        totalOrders: confirmedOrders.length,
         totalSpend,
       },
     });
@@ -108,15 +168,18 @@ export const getMySummary = async (req, res, next) => {
 export const getMyStatus = async (req, res, next) => {
   try {
     const userId = req.user?.userId;
-    const orders = await Order.find({ userId, status: "pending" })
+    const orders = await Order.find({ userId, status: { $in: ["pending", "paid"] } })
       .sort({ createdAt: -1 })
       .select("items status courier trackingNumber createdAt")
       .populate("items.productId", "images artist");
     const paymentProofMap = await getPaymentProofMap(orders);
+    const visibleOrders = flattenOrderItems(orders, paymentProofMap).filter(
+      (order) => order.displayStatus !== "confirmed",
+    );
 
     return res.status(200).json({
       success: true,
-      data: flattenOrderItems(orders, paymentProofMap),
+      data: visibleOrders,
     });
   } catch (error) {
     next(error);
@@ -131,10 +194,13 @@ export const getMyHistory = async (req, res, next) => {
       .select("items status courier trackingNumber createdAt")
       .populate("items.productId", "images artist");
     const paymentProofMap = await getPaymentProofMap(orders);
+    const confirmedOrders = flattenOrderItems(orders, paymentProofMap).filter(
+      (order) => order.displayStatus === "confirmed",
+    );
 
     return res.status(200).json({
       success: true,
-      data: flattenOrderItems(orders, paymentProofMap),
+      data: confirmedOrders,
     });
   } catch (error) {
     next(error);
@@ -149,20 +215,23 @@ export const getMyOrders = async (req, res, next) => {
       .select("items totalPrice status courier trackingNumber createdAt")
       .populate("items.productId", "images artist");
 
-    const paidOrders = orders.filter((order) => order.status === "paid");
     const paymentProofMap = await getPaymentProofMap(orders);
     const flattenedOrders = flattenOrderItems(orders, paymentProofMap);
+    const confirmedOrders = orders.filter((order) => {
+      const paymentProof = paymentProofMap.get(String(order._id)) || null;
+      return getDisplayStatus(order.status, paymentProof).key === "confirmed";
+    });
 
     return res.status(200).json({
       success: true,
       data: {
         summary: {
           totalOrders: orders.length,
-          totalSpend: paidOrders.reduce(
+          totalSpend: confirmedOrders.reduce(
             (sum, order) => sum + order.totalPrice,
             0,
           ),
-          completedOrders: paidOrders.length,
+          completedOrders: confirmedOrders.length,
         },
         orders: flattenedOrders,
       },
@@ -189,10 +258,10 @@ export const submitMyPaymentProof = async (req, res, next) => {
       });
     }
 
-    if (order.status !== "pending") {
+    if (order.status !== "paid") {
       return res.status(400).json({
         success: false,
-        message: "คำสั่งซื้อนี้ไม่สามารถแจ้งการโอนเงินได้แล้ว",
+        message: "คำสั่งซื้อนี้ยังไม่อยู่ในสถานะที่กรอกหลักฐานการโอนเงินได้",
       });
     }
 

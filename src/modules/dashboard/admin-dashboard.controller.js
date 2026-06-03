@@ -4,15 +4,15 @@ import { PaymentProof } from "../payment-proof/payment-proof.model.js";
 
 const STATUS_LABELS = {
   pending: "รอดำเนินการ",
-  paid: "สำเร็จแล้ว",
+  paid: "ชำระเงินแล้ว",
   cancelled: "ยกเลิก",
 };
 
 const PAYMENT_PROOF_STATUS_LABELS = {
   none: "ยังไม่ส่งข้อมูลโอน",
-  submitted: "รอตรวจสอบ",
-  approved: "อนุมัติแล้ว",
-  rejected: "ข้อมูลการโอนไม่ผ่าน",
+  submitted: "รอ admin ตรวจ",
+  approved: "confirmed",
+  rejected: "ตรวจสอบข้อมูลการโอนอีกครั้ง",
 };
 
 const CATEGORY_COLORS = {
@@ -20,6 +20,57 @@ const CATEGORY_COLORS = {
   "Craft & Handmade": "#8b5cf6",
   "Music & Sound": "#c4b5fd",
   Unknown: "#94a3b8",
+};
+
+const getDisplayStatus = (orderStatus, paymentProof = null) => {
+  if (orderStatus === "cancelled") {
+    return {
+      key: "cancelled",
+      label: "ยกเลิก",
+    };
+  }
+
+  if (orderStatus === "pending") {
+    return {
+      key: "pending",
+      label: "รอดำเนินการ",
+    };
+  }
+
+  if (orderStatus === "paid") {
+    if (!paymentProof) {
+      return {
+        key: "awaiting-proof",
+        label: "รอกรอกหลักฐาน",
+      };
+    }
+
+    if (paymentProof.status === "submitted") {
+      return {
+        key: "awaiting-review",
+        label: "รอ admin ตรวจ",
+      };
+    }
+
+    if (paymentProof.status === "approved") {
+      return {
+        key: "confirmed",
+        label: "confirmed ✅",
+      };
+    }
+
+    if (paymentProof.status === "rejected") {
+      return {
+        key: "awaiting-proof",
+        label: "ตรวจสอบข้อมูลการโอนอีกครั้ง",
+      };
+    }
+  }
+
+  return {
+    key: orderStatus,
+    label: STATUS_LABELS[orderStatus] || orderStatus,
+  };
 };
 
 const getCustomerLookup = async (orders) => {
@@ -49,6 +100,7 @@ const getPaymentProofMap = async (orders) => {
 const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
   orders.flatMap((order) => {
     const paymentProof = paymentProofMap.get(String(order._id)) || null;
+    const displayStatus = getDisplayStatus(order.status, paymentProof);
 
     return order.items.map((item, index) => ({
       id: `${order._id}-${item.productId}-${index}`,
@@ -56,6 +108,7 @@ const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
       productId: item.productId?._id || item.productId || null,
       name: item.name,
       artist: item.productId?.artist || "-",
+      images: item.productId?.images || [],
       image: item.productId?.images?.[0] || "",
       quantity: item.quantity,
       price: item.price,
@@ -63,6 +116,8 @@ const flattenOrders = (orders, customerLookup, paymentProofMap = new Map()) =>
       customer: customerLookup.get(String(order.userId)) || "-",
       status: order.status,
       statusLabel: STATUS_LABELS[order.status] || order.status,
+      displayStatus: displayStatus.key,
+      displayStatusLabel: displayStatus.label,
       courier: order.courier || "",
       trackingNumber: order.trackingNumber || "",
       paymentProofStatus: paymentProof?.status || "none",
@@ -96,7 +151,7 @@ const getMetricsFromPaidOrders = (paidOrders) => {
   };
 };
 
-const getSalesOverview = (paidOrders) => {
+const getSalesOverview = (paidOrders, paymentProofMap = new Map()) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -107,6 +162,11 @@ const getSalesOverview = (paidOrders) => {
     return {
       key: date.toISOString().slice(0, 10),
       label: date.toLocaleDateString("en-US", { weekday: "short" }),
+      fullDate: date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
       sales: 0,
     };
   });
@@ -114,7 +174,10 @@ const getSalesOverview = (paidOrders) => {
   const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
 
   paidOrders.forEach((order) => {
-    const bucketKey = new Date(order.createdAt).toISOString().slice(0, 10);
+    const paymentProof = paymentProofMap.get(String(order._id)) || null;
+    const effectiveDate =
+      order.paidAt || paymentProof?.reviewedAt || order.createdAt;
+    const bucketKey = new Date(effectiveDate).toISOString().slice(0, 10);
     const bucket = bucketMap.get(bucketKey);
 
     if (bucket) {
@@ -122,7 +185,11 @@ const getSalesOverview = (paidOrders) => {
     }
   });
 
-  return buckets.map(({ label, sales }) => ({ label, sales }));
+  return buckets.map(({ label, fullDate, sales }) => ({
+    label,
+    fullDate,
+    sales,
+  }));
 };
 
 const getCategoryBreakdown = (paidOrders) => {
@@ -166,7 +233,7 @@ export const getAdminOverview = async (req, res, next) => {
       success: true,
       data: {
         ...metrics,
-        salesOverview: getSalesOverview(paidOrders),
+        salesOverview: getSalesOverview(paidOrders, paymentProofMap),
         categoryBreakdown: getCategoryBreakdown(paidOrders),
         recentOrders: flattenedOrders.slice(0, 6),
       },
@@ -210,13 +277,14 @@ export const getAdminSales = async (req, res, next) => {
   try {
     const orders = await loadOrdersWithProducts();
     const paidOrders = orders.filter((order) => order.status === "paid");
+    const paymentProofMap = await getPaymentProofMap(orders);
     const metrics = getMetricsFromPaidOrders(paidOrders);
 
     return res.status(200).json({
       success: true,
       data: {
         ...metrics,
-        salesOverview: getSalesOverview(paidOrders),
+        salesOverview: getSalesOverview(paidOrders, paymentProofMap),
         categoryBreakdown: getCategoryBreakdown(paidOrders),
       },
     });
@@ -230,7 +298,16 @@ export const updateOrderShipping = async (req, res, next) => {
     const { orderId } = req.params;
     const { courier, trackingNumber } = req.body;
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        courier: String(courier || "").trim(),
+        trackingNumber: String(trackingNumber || "").trim(),
+      },
+      {
+        new: true,
+      },
+    );
 
     if (!order) {
       return res.status(404).json({
@@ -238,10 +315,6 @@ export const updateOrderShipping = async (req, res, next) => {
         message: "Order not found",
       });
     }
-
-    order.courier = String(courier || "").trim();
-    order.trackingNumber = String(trackingNumber || "").trim();
-    await order.save();
 
     return res.status(200).json({
       success: true,
@@ -281,12 +354,6 @@ export const reviewPaymentProof = async (req, res, next) => {
     if (action === "approve") {
       paymentProof.status = "approved";
       paymentProof.reviewedAt = new Date();
-
-      const order = await Order.findById(orderId);
-      if (order) {
-        order.status = "paid";
-        await order.save();
-      }
     }
 
     if (action === "reject") {
